@@ -1,0 +1,13 @@
+# 빌드 산출물
+build/
+*.hex
+*.elf
+*.bin
+
+# OS 잡파일
+.DS_Store
+Thumbs.db
+
+# 원본 대용량 데이터는 커밋 제외
+data/raw/
+webdemo/data/*.csv
