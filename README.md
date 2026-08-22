@@ -61,11 +61,13 @@ LoRa 메시 네트워크로 안내하는 3계층 알리미입니다.
    ```
    https://resource.heltec.cn/download/package_heltec_esp32_index.json
    ```
-3. **보드 설치**: 도구 → 보드 → 보드 매니저에서 "Heltec ESP32 Series
-   Dev-boards" 검색·설치 후, 보드로 **WiFi LoRa 32(V3)** 선택
+3. **보드 설치**: 도구 → 보드 → 보드 매니저에서 `heltec esp32` 검색 →
+   "Heltec ESP32 Series Arduino Develop Environment" 설치 후, 보드로
+   **WiFi LoRa 32(V3)** 선택
 4. **라이브러리 설치**: 스케치 → 라이브러리 포함 → 라이브러리 매니저에서
-   **RadioLib** 검색·설치 (LoRa용. BLE는 ESP32 기본 스택 사용이라 추가
-   설치 불필요)
+   - **RadioLib** (LoRa 송수신)
+   - **Heltec ESP32 Dev-Boards** (보드 내장 OLED 표시용)
+   - BLE는 ESP32 기본 스택 사용이라 추가 설치 불필요
 5. USB 연결 후 도구 → 포트에서 보드 포트 선택. 업로드가 안 되면 드라이버
    (USB-Serial) 설치 여부 확인
    - `TODO:` 보드 도착 후 실제 포트명·드라이버 종류를 여기에 기록
