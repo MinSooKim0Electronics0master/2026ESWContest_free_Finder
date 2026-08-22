@@ -64,6 +64,10 @@ LoRa 메시 네트워크로 안내하는 3계층 알리미입니다.
 3. **보드 설치**: 도구 → 보드 → 보드 매니저에서 `heltec esp32` 검색 →
    "Heltec ESP32 Series Arduino Develop Environment" 설치 후, 보드로
    **WiFi LoRa 32(V3)** 선택
+   - 주의: 목록에 `WiFi LoRa 32`, `WiFi LoRa 32(V2)`, `WiFi LoRa 32(V3)`
+     세 항목이 나란히 있다. **반드시 `(V3)`** — V1/V2를 고르면
+     `'BUSY_LoRa' was not declared` 오류가 난다(구형은 SX1276이라 BUSY
+     핀이 없음). 선택 후 창 오른쪽 아래에 `(V3)`가 찍히는지 확인
 4. **라이브러리 설치**: 스케치 → 라이브러리 포함 → 라이브러리 매니저에서
    - **RadioLib** (LoRa 송수신)
    - **Heltec ESP32 Dev-Boards** (보드 내장 OLED 표시용)
