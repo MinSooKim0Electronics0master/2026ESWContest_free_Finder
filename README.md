@@ -29,20 +29,20 @@ LoRa 메시 네트워크로 안내하는 3계층 알리미입니다.
 |---|---|---|
 | `firmware/node/` | 시설 부착 노드 펌웨어(.ino) — BLE 비콘·LoRa 메시·게이트웨이 | **민수** |
 | `firmware/handset/` | 수신 단말 펌웨어(.ino) — LoRa 수신·OLED 표시 | **민수** |
-| `firmware/common/` | 공유 패킷 규격(`packet.h`) — 노드·단말·시뮬레이터 공통 | 이령 |
-| `sim/` | 메시 릴레이 파이썬 시뮬레이터와 우회 테스트 | 이령 |
-| `webdemo/` | 평시 원거리 안내 카카오맵 데모(단일 HTML) | 이령 |
-| `webdemo/data/` | 공공데이터 CSV 놓는 곳(원본 CSV는 커밋 제외) | 이령 |
+| `firmware/common/` | 공유 패킷 규격(`packet.h`) — 노드·단말·시뮬레이터 공통 | 이휘 |
+| `sim/` | 메시 릴레이 파이썬 시뮬레이터와 우회 테스트 | 이휘 |
+| `webdemo/` | 평시 원거리 안내 카카오맵 데모(단일 HTML) | 이휘 |
+| `webdemo/data/` | 공공데이터 CSV 놓는 곳(원본 CSV는 커밋 제외) | 이휘 |
 | `data/` | 실측 기록(RSSI CSV 등) | 민수 |
 | `hardware/` | 보드·배선·케이스 등 하드웨어 자료 | 공동 |
-| `docs/` | 이슈 초안·가이드·문서 | 이령 |
-| `docs/meetings/` | 회의록 | 이령 |
+| `docs/` | 이슈 초안·가이드·문서 | 이휘 |
+| `docs/meetings/` | 회의록 | 이휘 |
 
 ## 역할 분담
 
 - **김민수(제작자)**: 제품 펌웨어 전부(`firmware/node/`, `firmware/handset/`),
   실측 데이터 수집. 심사 Q&A에서 답할 사람이 직접 만든다.
-- **이령(멘토)**: 패킷 규격, 시뮬레이터, 웹 데모, 문서, PR 리뷰.
+- **이휘(멘토)**: 패킷 규격, 시뮬레이터, 웹 데모, 문서, PR 리뷰.
   펌웨어 구현 코드는 작성하지 않는다(리뷰 코멘트·질문·개념 힌트만).
 
 ## 하드웨어
@@ -87,7 +87,7 @@ RadioLib `SX1262` + `packet.h`를 포함한 테스트 스케치가 보드
 ## 협업 규칙 (요약)
 
 - 저장소는 민수 소유, `main` 브랜치 보호(직접 push 금지, PR 필수)
-- 흐름: 브랜치 생성 → 커밋 → PR → 이령 리뷰 → 병합
-- 민수는 GitHub Desktop, 이령은 웹/CLI 사용
+- 흐름: 브랜치 생성 → 커밋 → PR → 이휘 리뷰 → 병합
+- 민수는 GitHub Desktop, 이휘은 웹/CLI 사용
 - 자세한 절차: [docs/github-guide.md](docs/github-guide.md)
 - 구현 로드맵(PR 1~5): [docs/tasks.md](docs/tasks.md)
