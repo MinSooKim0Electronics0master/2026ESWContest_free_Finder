@@ -20,5 +20,8 @@ LoRa로 노드 메시지를 받아 OLED에 표시한다. 패킷 규격은
 - 패킷 규격: [`../common/packet.h`](../common/packet.h)
 - RadioLib 예제: https://github.com/jgromes/RadioLib/tree/master/examples
   (SX126x Receive 예제, RSSI는 수신 후 `getRSSI()` 계열 참고)
-- OLED: Heltec 보드 매니저에 포함된 예제(0.96" SSD1306)부터 확인
+- OLED: 라이브러리 "Heltec ESP32 Dev-Boards"의 예제부터 확인.
+  핀 상수는 `SDA_OLED`(17) / `SCL_OLED`(18) / `RST_OLED`(21)이고,
+  **`Vext`(36)를 LOW로 내려야 OLED에 전원이 들어갑니다** — 전체 핀맵은
+  [`../node/README.md`](../node/README.md)의 표 참고
 - `TODO:` RSSI 이동평균 창 크기(몇 개 평균이 자연스러운지)는 실측하며 결정

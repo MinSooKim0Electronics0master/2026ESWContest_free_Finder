@@ -25,5 +25,20 @@
   같은 3규칙을 파이썬으로 모사한 시뮬레이터. 로직이 헷갈리면 여기 로그를
   먼저 돌려 볼 것
 - BLE 광고 확인 앱: nRF Connect for Mobile (Android/iOS)
-- `TODO:` Heltec V3 보드의 SX1262 핀맵은 보드 도착 후 보드 문서로 확인해
-  여기에 기록
+
+## Heltec WiFi LoRa 32 V3 핀맵 (보드 패키지 3.3.8의 variant 정의에서 확인)
+
+보드를 `Heltec WiFi LoRa 32(V3)`로 선택하면 아래 이름이 **상수로 이미
+정의**돼 있어 숫자를 직접 쓸 필요가 없습니다.
+
+| 용도 | 상수 이름 | GPIO | 비고 |
+|---|---|---|---|
+| LoRa SPI 선택(NSS) | `SS` | 8 | RadioLib `Module(SS, DIO0, RST_LoRa, BUSY_LoRa)` |
+| LoRa 인터럽트 | `DIO0` | 14 | 이름은 DIO0이지만 SX1262의 **DIO1** 핀입니다 |
+| LoRa 리셋 | `RST_LoRa` | 12 | |
+| LoRa BUSY | `BUSY_LoRa` | 13 | |
+| LoRa SPI | `SCK` / `MISO` / `MOSI` | 9 / 11 / 10 | 기본 `SPI` 객체가 자동 사용 |
+| OLED I2C | `SDA_OLED` / `SCL_OLED` | 17 / 18 | 일반 `SDA/SCL`(41/42)과 다름 |
+| OLED 리셋 | `RST_OLED` | 21 | |
+| 외부 전원 스위치 | `Vext` | 36 | **LOW로 내려야 OLED에 전원**이 들어감 |
+| 내장 LED | `LED` | 35 | |
