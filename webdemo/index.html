@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>필요시설 알리미 — 평시 원거리 데모</title>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  finder-project 계층 ① 데모: 오프라인 공공데이터 + GPS로 최근접 시설 안내
+  단일 파일. 데이터 CSV는 webdemo/data/ 에 둔다 (스키마·다운로드 절차는
+  webdemo/data/README.md 참고 — 원본 CSV는 .gitignore로 커밋 제외).
+
+  ── 카카오맵 JS API 키 발급 절차 ──────────────────────────────────
+  1. https://developers.kakao.com 로그인 → [내 애플리케이션] → 애플리케이션 추가
+  2. 앱 설정 > 앱 키 에서 "JavaScript 키" 복사
+  3. 앱 설정 > 플랫폼 > Web 에 사이트 도메인 등록
+     (로컬 테스트용으로 http://localhost:8000 등록)
+  4. 아래 KAKAO_APP_KEY 의 TODO_KAKAO_KEY 를 그 키로 교체
+
+  ── 실행 방법 ────────────────────────────────────────────────────
+  webdemo/ 폴더에서:   python -m http.server 8000   (윈도우는 py -m ...)
+  브라우저에서:        http://localhost:8000
+  ※ file:// 로 직접 열면 CSV fetch가 브라우저 보안 정책에 막힌다.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<style>
+  html, body { height: 100%; margin: 0; font-family: "Malgun Gothic", sans-serif; }
+  #app  { display: flex; flex-direction: column; height: 100%; }
+  #bar  { padding: 8px; display: flex; gap: 6px; align-items: center;
+          border-bottom: 1px solid #ddd; flex-wrap: wrap; }
+  #bar button { padding: 8px 14px; font-size: 15px; cursor: pointer;
+                border: 1px solid #bbb; border-radius: 6px; background: #f7f7f7; }
+  #bar button.active { background: #2b6cb0; color: #fff; border-color: #2b6cb0; }
+  #status { padding: 6px 10px; font-size: 14px; color: #333; background: #fafafa;
+            border-bottom: 1px solid #eee; min-height: 1.2em; }
+  #map  { flex: 1; }
+  #map .placeholder { display: flex; height: 100%; align-items: center;
+                      justify-content: center; color: #666; text-align: center;
+                      padding: 0 24px; white-space: pre-line; }
+</style>
+<script>
+  // TODO: 발급받은 JavaScript 키로 교체 (위 발급 절차 참고)
+  const KAKAO_APP_KEY = "TODO_KAKAO_KEY";
+</script>
+<script>
+  // 키가 채워졌을 때만 SDK를 로드한다 (플레이스홀더 상태로 요청하면 콘솔 오류만 남)
+  if (KAKAO_APP_KEY !== "TODO_KAKAO_KEY") {
+    document.write('<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey='
+      + KAKAO_APP_KEY + '&autoload=false"><\/script>');
+  }
+</script>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <strong>필요시설 알리미</strong>
+    <button data-type="aed">AED</button>
+    <button data-type="hydrant">소화전</button>
+    <button data-type="toilet">화장실</button>
+  </div>
+  <div id="status">시설 버튼을 누르면 현재 위치에서 가장 가까운 시설을 안내합니다.</div>
+  <div id="map"><div class="placeholder">지도 영역</div></div>
+</div>
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// 데이터 소스 설정 — webdemo/data/README.md 의 스키마와 반드시 일치시킬 것.
+// 데이터를 지어내지 않는다: CSV가 없으면 안내 메시지만 띄운다.
+// ---------------------------------------------------------------------------
+const FACILITY_SOURCES = {
+  toilet: {
+    label: "화장실",
+    file: "data/toilets.csv",       // 전국공중화장실표준데이터 (data/README.md 참고)
+    nameCol: "화장실명",
+    latCol: "WGS84위도",
+    lngCol: "WGS84경도",
+  },
+  aed: {
+    label: "AED",
+    file: "data/aed.csv",
+    // TODO: 공공데이터포털에서 AED 데이터 다운로드 후 실제 컬럼명으로 교체
+    nameCol: "TODO_설치소명_컬럼",
+    latCol: "TODO_위도_컬럼",
+    lngCol: "TODO_경도_컬럼",
+  },
+  hydrant: {
+    label: "소화전",
+    file: "data/hydrants.csv",
+    // TODO: 소방청 소화전 데이터 다운로드 후 실제 컬럼명으로 교체
+    nameCol: "TODO_컬럼",
+    latCol: "TODO_컬럼",
+    lngCol: "TODO_컬럼",
+  },
+};
+
+// 위치 권한 거부·실패 시의 지도 초기 중심(서울시청). 데모 기본값일 뿐
+// 시설 데이터가 아니므로 "데이터를 지어내지 않는다" 원칙과 무관하다.
+const FALLBACK_CENTER = { lat: 37.5665, lng: 126.9780 };
+
+const statusEl = document.getElementById("status");
+const setStatus = (msg) => { statusEl.textContent = msg; };
+
+let map = null;
+let overlays = [];      // 현재 표시 중인 마커·선 (시설 전환 시 지운다)
+const cache = {};       // 시설 종류별 파싱 결과 캐시
+
+// ---------------------------------------------------------------------------
+// CSV 로딩 — 공공데이터포털 CSV는 EUC-KR(CP949)인 경우가 많아, UTF-8로 먼저
+// 시도하고 깨지면 EUC-KR로 다시 디코딩한다.
+// ---------------------------------------------------------------------------
+async function fetchCsv(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`${path} 없음 (HTTP ${res.status})`);
+  const buf = await res.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    return new TextDecoder("euc-kr").decode(buf);
+  }
+}
+
+// 따옴표로 감싼 필드(내부 쉼표·줄바꿈 포함)까지 처리하는 최소 CSV 파서.
+// 반환: 객체 배열 (첫 줄을 헤더로 사용)
+function parseCsv(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') inQuotes = false;
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); field = "";
+      if (row.some(v => v !== "")) rows.push(row);
+      row = [];
+    } else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  if (!rows.length) return [];
+  const header = rows[0].map(h => h.trim());
+  return rows.slice(1).map(r =>
+    Object.fromEntries(header.map((h, i) => [h, (r[i] ?? "").trim()])));
+}
+
+async function loadFacilities(type) {
+  if (cache[type]) return cache[type];
+  const src = FACILITY_SOURCES[type];
+  if (src.latCol.startsWith("TODO")) {
+    throw new Error(`${src.label} 데이터의 컬럼명이 아직 미정입니다 — ` +
+      `CSV 다운로드 후 index.html의 FACILITY_SOURCES를 채우세요 (data/README.md 참고)`);
+  }
+  const rows = parseCsv(await fetchCsv(src.file));
+  const items = rows
+    .map(r => ({ name: r[src.nameCol], lat: +r[src.latCol], lng: +r[src.lngCol] }))
+    .filter(p => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  if (!items.length) throw new Error(
+    `${src.file} 에서 유효한 좌표를 읽지 못했습니다 — 컬럼명이 스키마와 맞는지 확인`);
+  cache[type] = items;
+  return items;
+}
+
+// ---------------------------------------------------------------------------
+// 거리·위치
+// ---------------------------------------------------------------------------
+function haversineM(a, b) {
+  const R = 6371000, rad = (d) => d * Math.PI / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function getLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(FALLBACK_CENTER);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => { setStatus("위치 권한이 없어 기본 위치(서울시청)를 사용합니다."); resolve(FALLBACK_CENTER); },
+      { enableHighAccuracy: true, timeout: 5000 });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 지도 표시
+// ---------------------------------------------------------------------------
+function clearOverlays() { overlays.forEach(o => o.setMap(null)); overlays = []; }
+
+async function showNearest(type) {
+  const src = FACILITY_SOURCES[type];
+  setStatus(`${src.label} 데이터 읽는 중...`);
+  try {
+    const [items, here] = await Promise.all([loadFacilities(type), getLocation()]);
+    const nearest = items
+      .map(p => ({ ...p, dist: haversineM(here, p) }))
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 5);                       // 최근접 5곳 표시, 1위에 직선 안내
+    clearOverlays();
+    map.setCenter(new kakao.maps.LatLng(here.lat, here.lng));
+
+    const me = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(here.lat, here.lng), map });
+    overlays.push(me);
+
+    nearest.forEach((p, i) => {
+      const pos = new kakao.maps.LatLng(p.lat, p.lng);
+      const marker = new kakao.maps.Marker({ position: pos, map });
+      const info = new kakao.maps.InfoWindow({
+        content: `<div style="padding:4px 8px;font-size:12px">` +
+                 `${i + 1}. ${p.name} (${Math.round(p.dist)} m)</div>` });
+      info.open(map, marker);
+      overlays.push(marker, info);
+    });
+
+    const best = nearest[0];
+    const line = new kakao.maps.Polyline({
+      map,
+      path: [new kakao.maps.LatLng(here.lat, here.lng),
+             new kakao.maps.LatLng(best.lat, best.lng)],
+      strokeWeight: 4, strokeColor: "#e53e3e", strokeStyle: "shortdash",
+    });
+    overlays.push(line);
+    setStatus(`가장 가까운 ${src.label}: ${best.name} — 직선 약 ${Math.round(best.dist)} m`);
+  } catch (e) {
+    setStatus(`불러오기 실패: ${e.message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 초기화
+// ---------------------------------------------------------------------------
+function initMap() {
+  kakao.maps.load(() => {
+    document.querySelector("#map .placeholder")?.remove();
+    map = new kakao.maps.Map(document.getElementById("map"), {
+      center: new kakao.maps.LatLng(FALLBACK_CENTER.lat, FALLBACK_CENTER.lng),
+      level: 5,
+    });
+  });
+}
+
+document.querySelectorAll("#bar button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#bar button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    if (!map) { setStatus("지도가 아직 준비되지 않았습니다 — API 키를 확인하세요."); return; }
+    showNearest(btn.dataset.type);
+  });
+});
+
+if (KAKAO_APP_KEY === "TODO_KAKAO_KEY") {
+  document.querySelector("#map .placeholder").textContent =
+    "카카오맵 API 키가 아직 없습니다.\n" +
+    "이 파일 상단 주석의 발급 절차를 따라 KAKAO_APP_KEY를 채우세요.";
+  setStatus("API 키 미설정 — index.html 상단 주석 참고");
+} else {
+  window.addEventListener("load", initMap);
+}
+</script>
+</body>
+</html>

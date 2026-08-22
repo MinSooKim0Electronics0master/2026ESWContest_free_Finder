@@ -1,0 +1,20 @@
+# 빌드 산출물
+build/
+*.hex
+*.elf
+*.bin
+
+# OS 잡파일
+.DS_Store
+Thumbs.db
+
+# 원본 대용량 데이터는 커밋 제외
+data/raw/
+webdemo/data/*.csv
+
+# 파이썬 자동 생성 캐시
+__pycache__/
+*.pyc
+
+# Office 임시 잠금 파일 (문서를 열어 둔 동안 생김)
+~$*
