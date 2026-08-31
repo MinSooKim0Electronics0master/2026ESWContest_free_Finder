@@ -36,7 +36,7 @@ MSG_CACHE_SIZE = 16        # FINDER_MSG_CACHE_SIZE
 RELAY_DELAY_MIN_MS = 50    # FINDER_RELAY_DELAY_MIN_MS
 RELAY_DELAY_MAX_MS = 300   # FINDER_RELAY_DELAY_MAX_MS
 TTL_INITIAL = 4            # FINDER_TTL_INITIAL
-FREQ_MHZ = 923.0           # FINDER_FREQ_MHZ (동작에는 안 쓰이지만 규격 대조용)
+FREQ_MHZ = 433.92          # FINDER_FREQ_MHZ (동작에는 안 쓰이지만 규격 대조용)
 
 # 패킷 1건이 전파를 타는 시간(전파 지연은 0으로 침).
 # TODO: 보드 도착 후 실제 SF/BW 설정의 airtime 실측값으로 교체
@@ -79,6 +79,7 @@ class Packet:
     facility_type: int  # 1=AED, 2=소화전, 3=화장실
     status: int         # 0=정상, 1=점검
     ttl: int            # 남은 홉 수
+    last_hop_id: int    # 마지막으로 송신한 노드 ID
 
 
 def make_msg_id(src_id, seq):
@@ -131,7 +132,8 @@ def run_sim(topology="diamond", kill=(), src="A", dst="D",
 
     # 발신: src가 t=0에 시퀀스 1번 메시지를 만들어 즉시 송신.
     pkt0 = Packet(msg_id=make_msg_id(node_ids[src], 1), src_id=node_ids[src],
-                  facility_type=1, status=0, ttl=ttl)
+                  facility_type=1, status=0, ttl=ttl,
+                  last_hop_id=node_ids[src])
     caches[src].append(pkt0.msg_id)  # 자기 메시지도 캐시에 — 되돌아온 메아리 폐기용
     emit(0, f"{src}: {label(pkt0)} 발신 시작 (TTL {ttl}, 제거된 노드: "
             f"{', '.join(sorted(killed)) or '없음'})")
@@ -168,7 +170,8 @@ def run_sim(topology="diamond", kill=(), src="A", dst="D",
         # 릴레이 규칙 ③: 재송신 전 랜덤 지연 (동시 송신 충돌 회피)
         delay = rng.randint(RELAY_DELAY_MIN_MS, RELAY_DELAY_MAX_MS)
         emit(t, f"{node}: {delay} ms 뒤 재송신 예약 (TTL {pkt.ttl}→{pkt.ttl - 1})")
-        push(t + delay, "tx", node, replace(pkt, ttl=pkt.ttl - 1))
+        push(t + delay, "tx", node,
+             replace(pkt, ttl=pkt.ttl - 1, last_hop_id=node_ids[node]))
 
     delivered = dst in first_rx
     emit(max(first_rx.values(), default=0),

@@ -1,81 +1,101 @@
-# Wokwi 연습 프로젝트 (보드 도착 전 예행)
+# Wokwi 하이브리드 메시 시연
 
-보드가 도착하기 전에 브라우저 시뮬레이터 **Wokwi**(https://wokwi.com)에서
-연습하는 프로젝트 두 개입니다. Wokwi는 ESP32-S3와 OLED는 시뮬레이션되지만
-**LoRa와 BLE는 시뮬레이션되지 않습니다.** 그래서 2단계에서는 WiFi(MQTT)를
-"가짜 전파"로 사용해 메시 로직만 먼저 완성합니다. 보드가 오면 송수신
-함수만 RadioLib으로 바꾸면 로직은 그대로 씁니다.
+실물 LoRa 보드 4대가 준비되기 전까지 Wokwi A·B·C 세 노드와 실물 수신
+단말 D 한 대를 연결해 메시 우회 로직, 실제 OLED와 실제 BLE를 검증합니다.
+
+Wokwi는 LoRa와 BLE를 직접 시뮬레이션하지 않습니다. Wokwi 노드 사이와
+실물 D까지의 패킷 전달은 Wi-Fi/MQTT가 대신합니다. 따라서 이 결과는 메시
+프로토콜과 실물 출력의 하이브리드 검증이며 실제 LoRa 거리·RSSI 검증이
+아닙니다.
 
 | 폴더 | 내용 | 목표 |
 |---|---|---|
-| `warmup/` | ESP32-S3 + OLED + 버튼 | Arduino 기본기 (PR1·PR3 예행) |
-| `mesh-practice/` | ESP32-S3 4대(탭 4개) + 가짜 전파 | 릴레이 3규칙 (PR4 예행) |
+| `warmup/` | ESP32-S3 + OLED + 버튼 | Arduino·OLED 기본 동작 연습 |
+| `mesh-practice/` | Wokwi A·B·C + MQTT | 캐시·TTL·랜덤 지연·B 제거 우회 |
 
-## 시작 방법 (공통)
+실물 D 준비 방법은
+[`../../firmware/handset/hybrid_bridge_check/README.md`](../../firmware/handset/hybrid_bridge_check/README.md)를
+따릅니다.
 
-1. https://wokwi.com 에서 구글 계정으로 로그인합니다(저장하려면 필요).
-2. **+ New Project** → **ESP32-S3** 를 선택합니다.
-3. 파일을 옮깁니다:
-   - `sketch.ino` 탭: 이 폴더의 sketch.ino 내용으로 전부 교체
-   - `diagram.json` 탭: 이 폴더의 diagram.json 내용으로 전부 교체
-   - 라이브러리: 코드 탭 옆 **Library Manager**에서 `libraries.txt`에 적힌
-     이름을 검색해 추가합니다
-   - 새 파일이 필요하면 sketch.ino 탭 오른쪽의 **▼ → New file...** 로
-     만듭니다
-4. 위쪽 초록 **▶ 재생 버튼**으로 실행하고, 아래 시리얼 모니터로 출력을
-   확인합니다.
-5. 배선이 어긋나 보이면 다이어그램 화면에서 선을 마우스로 다시 연결하면
-   됩니다.
+## Wokwi 프로젝트 만들기
 
-## 1단계 — warmup (이번 주 평일)
+1. [Wokwi](https://wokwi.com)에 로그인합니다.
+2. **+ New Project → ESP32**를 선택합니다.
+3. `mesh-practice/`의 파일을 프로젝트에 만듭니다.
+   - `sketch.ino`
+   - `packet.h`
+   - `fake_radio.h`
+   - `diagram.json`
+   - `libraries.txt`
+4. `diagram.json`을 저장소 내용으로 교체하면 ESP32 DevKit V4와 시리얼
+   모니터 연결이 자동으로 설정됩니다.
+5. `libraries.txt`를 넣으면 `PubSubClient`가 설치됩니다. 설치되지 않으면
+   Library Manager에서 직접 추가합니다.
+6. 프로젝트를 `Finder-A`라는 이름으로 저장합니다.
+7. 프로젝트 메뉴의 **Save a Copy**로 `Finder-B`, `Finder-C`를 만듭니다.
 
-스케치의 TODO 1~4를 순서대로 합니다. 완료 기준:
+## 노드 ID 설정
 
-- [ ] 시리얼에 1초마다 증가하는 카운터가 찍힌다
-- [ ] 같은 값이 OLED에도 표시된다
-- [ ] 버튼을 누르면 카운터가 0으로 돌아간다
-- [ ] (도전) 카운터 크기에 비례하는 가로 막대를 OLED에 그린다 → PR3의
-      "세기 바"와 같은 원리입니다
+각 프로젝트의 `sketch.ino` 위쪽 값을 다음처럼 설정합니다.
 
-## 2단계 — mesh-practice (warmup 완료 후)
+```cpp
+// Finder-A
+#define FINDER_WOKWI_NODE_ID FINDER_NODE_A
 
-PR4(메시 릴레이 3규칙)의 예행입니다. 규칙은
-[`../../firmware/common/packet.h`](../../firmware/common/packet.h) 규격을
-그대로 씁니다.
+// Finder-B
+#define FINDER_WOKWI_NODE_ID FINDER_NODE_B
 
-1. 프로젝트를 만들고 `packet.h`, `fake_radio.h` 파일을 새로 만들어
-   내용을 붙여 넣습니다. `packet.h` 내용은 저장소의
-   `firmware/common/packet.h`를 그대로 복사합니다.
-2. `fake_radio.h` 안의 `TODO_TEAM`을 팀만 아는 문자열로 바꿉니다
-   (4개 탭 모두 같은 값이어야 서로 통신됩니다).
-3. 스케치의 TODO 1~4(캐시 → 수신 처리 → setup → loop)를 구현합니다.
-4. 완성되면 프로젝트를 **Save As**로 4개 복제하고, 각 프로젝트에서
-   상단의 노드 설정(MY_ID, HEAR)만 표에 맞게 바꿉니다: A=1, B=2, C=3,
-   D=4.
-5. 브라우저 탭 4개로 A~D를 모두 실행합니다. A가 10초마다 발신하고
-   B·C가 중계해 D에 도착하는 것을 각 시리얼에서 확인합니다.
-6. **우회 실험**: B 탭의 정지 버튼을 누르고(전원 제거에 해당) A→C→D로
-   계속 수신되는지 확인합니다. 이것이 대회 결정적 시연의 예행입니다.
+// Finder-C
+#define FINDER_WOKWI_NODE_ID FINDER_NODE_C
+```
 
-완료 기준:
+한 프로젝트에는 한 줄만 사용합니다. 기본값은 A입니다.
 
-- [ ] D의 시리얼에 A의 메시지가 도착한다 (중복은 "폐기" 로그)
-- [ ] B를 정지해도 D 수신이 유지된다
-- [ ] 시리얼 로그가 `sim/mesh_sim.py` 실행 로그와 같은 순서로 나온다
+## 첫 연결 확인
 
-로그와 화면은 스크린샷으로 남깁니다 — 개발완료보고서의 "사전 검증"
-자료로 씁니다.
+1. 실물 D에 `hybrid_bridge_check.ino`를 업로드합니다.
+2. 실물 D 시리얼 모니터에서 MQTT 구독 완료를 확인합니다.
+3. Wokwi Finder-A를 실행합니다.
+4. 첫 패킷이 실물 D에 `via=A`로 나타나는지 확인합니다.
 
-## 보드가 도착하면
+첫 패킷은 인터넷 MQTT 연결 확인용입니다. 이후 실물 D는 A의 직접 패킷을
+무시하고 B/C가 중계한 패킷만 수신합니다.
 
-`fake_radio.h`의 세 함수(fakeRadioBegin / fakeRadioSend / fakeRadioLoop)
-호출부를 RadioLib의 초기화/transmit/receive로 바꾸면, 스케치에 구현한
-캐시·TTL·랜덤 지연 로직은 수정 없이 그대로 씁니다. 통신층과 로직을
-나눠 두는 이유가 이것입니다.
+## 정상 경로와 우회 경로
+
+1. Finder-A, Finder-B, Finder-C를 모두 실행합니다.
+2. 다음 새 메시지에서 실물 D OLED의 `A -> B -> D`를 확인합니다.
+3. Finder-B의 빨간 정지 버튼을 누릅니다.
+4. 다음 새 메시지에서 실물 D OLED의 `A -> C -> D`를 확인합니다.
+5. Finder-C도 정지하면 새 메시지가 D에 도착하지 않는지 확인합니다.
+6. Finder-C를 다시 실행하면 수신이 재개되는지 확인합니다.
+
+정상 상태에서는 시연이 분명하게 보이도록 B가 50~120ms, C가 180~300ms
+뒤에 재송신합니다. 두 값 모두 공통 규격의 50~300ms 범위 안입니다.
+
+## 완료 기준
+
+- [x] 실물 D가 첫 A 직접 패킷을 받아 MQTT 연결을 확인합니다.
+- [x] 이후 메시지는 B 또는 C 경유만 실물 D가 받습니다.
+- [x] 정상 상태에서 OLED에 `A -> B -> D`가 표시됩니다.
+- [x] B 정지 후 OLED에 `A -> C -> D`가 표시됩니다.
+- [x] nRF Connect에서 `Finder-D` BLE 광고의 `msgId` 변경을 확인합니다.
+- [x] OLED에 `LINK: MQTT SIM`, `BLE: REAL / RF: TODO`가 표시됩니다.
+
+## 확인 기록
+
+2026-08-29에 다음을 실물 D와 Wokwi A·B·C로 확인했습니다.
+
+- Wokwi A 프로젝트: https://wokwi.com/projects/473666618607702017
+- B 정상 동작 시 `A -> B -> D`, B 정지 시 `A -> C -> D`로 우회했습니다.
+- B를 다시 실행했을 때 정상 경로가 복구되었습니다.
+- nRF Connect에서 `Finder-D`의 Manufacturer data와 마지막 중계 노드
+  값이 확인되었습니다.
+- B·C 프로젝트 주소는 온라인 인계 회의에서 민수 계정에도 저장합니다.
 
 ## 주의
 
-- 가짜 전파는 **공개 MQTT 브로커**를 지나갑니다. 누구나 볼 수 있으니
-  개인 정보를 담지 말고, `TODO_TEAM`은 추측하기 어려운 문자열로 합니다.
-- `fake_radio.h`는 연습용 멘토 제공 도구입니다. 제품 펌웨어
-  (`firmware/`)에는 넣지 않습니다.
+- 공개 MQTT 브로커를 사용하므로 개인정보와 비밀번호를 패킷에 넣지 않습니다.
+- `hybrid_secrets.h`는 실물 보드에만 있으며 GitHub에 올리지 않습니다.
+- 공개 브로커 또는 인터넷이 멈추면 하이브리드 시연도 멈춥니다.
+- Wokwi 값을 실제 RSSI·거리·전파 시험 결과로 기록하지 않습니다.

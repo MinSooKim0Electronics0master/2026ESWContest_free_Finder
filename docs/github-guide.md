@@ -6,6 +6,29 @@
 이 저장소에서 작업할 때 헷갈리면 이 문서만 보면 된다.
 규칙은 딱 하나만 기억해도 된다: **main에서 직접 작업하지 않는다.**
 
+## 0. 처음 한 번: 저장소 전체 받기
+
+파일을 메신저로 하나씩 받지 않고 저장소 전체를 Clone합니다.
+
+1. GitHub Desktop에서 민수의 GitHub 계정으로 로그인합니다.
+2. **File → Clone repository...**를 누릅니다.
+3. **GitHub.com** 탭에서
+   `MinSooKim0Electronics0master/2026ESWContest_free_Finder`를 선택합니다.
+4. Local path는 `Documents\\GitHub` 아래처럼 찾기 쉬운 위치를 선택하고
+   **Clone**을 누릅니다.
+5. 위쪽 **Fetch origin**을 한 번 누릅니다.
+6. **Current Branch**를 누르고 `feature/lilygo-mesh-demo`를 선택합니다.
+7. **Repository → Show in Explorer**로 실제 폴더를 확인합니다.
+
+이미 Clone한 저장소라면 다시 Clone하지 않습니다. Current Repository에서
+이 저장소를 선택하고 **Current Branch → feature/lilygo-mesh-demo → Fetch
+origin → Pull origin** 순서로 갱신합니다. `Pull origin`이 보이지 않으면 이미
+최신 상태입니다.
+
+공식 도움말: [저장소 Clone](https://docs.github.com/en/desktop/adding-and-cloning-repositories/cloning-and-forking-repositories-from-github-desktop),
+[브랜치 전환](https://docs.github.com/en/desktop/making-changes-in-a-branch/managing-branches-in-github-desktop),
+[Fetch와 Pull](https://docs.github.com/en/desktop/working-with-your-remote-repository-on-github-or-github-enterprise/syncing-your-branch-in-github-desktop)
+
 ## 1. 앉으면 하는 루틴 (매번, 순서대로)
 
 1. **Fetch origin** — 오른쪽 위 버튼. 서버의 최신 상태를 확인만 한다
@@ -32,7 +55,7 @@
 2. Desktop에 뜨는 **"Create Pull Request"** 버튼 → 브라우저가 열린다
 3. 제목은 이슈 제목과 비슷하게, 본문에 `Closes #이슈번호` 한 줄과
    확인 방법(사진·영상 링크)을 쓴다
-4. **Create pull request** 누르고 이령에게 알린다 → 리뷰 → 병합
+4. **Create pull request** 누르고 이휘에게 알린다 → 리뷰 → 병합
 5. 병합되면 루틴 1번부터 다시 (main으로 돌아가 Pull, 새 브랜치)
 
 ## 4. 사고 수습 3종
@@ -43,7 +66,7 @@
 | 커밋 **직후** 실수를 알았다 (Push 전) | 왼쪽 아래 **Undo** 버튼 — 커밋이 풀리고 수정 내용은 남는다. 고쳐서 다시 커밋 |
 | **Push까지 한** 커밋을 되돌리고 싶다 | History 탭에서 해당 커밋 우클릭 → **Revert Changes in Commit** — 되돌리는 새 커밋이 생긴다. 옛 커밋을 지우려 하지 말 것 |
 
-셋 다 애매하면 아무것도 누르지 말고 이령에게 화면을 보여 준다.
+셋 다 애매하면 아무것도 누르지 말고 이휘에게 화면을 보여 준다.
 
 ## 5. 충돌(conflict)이 났을 때
 
@@ -54,7 +77,7 @@ Pull이나 병합 때 "conflicts" 경고가 뜨면:
 3. `<<<<<<<`, `=======`, `>>>>>>>` 마커 사이에 두 버전이 보인다.
    남길 내용만 남기고 **마커 세 줄은 전부 지운다**
 4. 파일을 저장하면 Desktop의 충돌 표시가 체크로 바뀐다 → 커밋으로 마무리
-5. 어느 쪽을 남길지 판단이 안 서면 그 상태로 이령에게 물어본다
+5. 어느 쪽을 남길지 판단이 안 서면 그 상태로 이휘에게 물어본다
 
 ## 6. 금지 4항
 
