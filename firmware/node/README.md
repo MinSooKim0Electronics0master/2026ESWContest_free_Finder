@@ -1,8 +1,8 @@
 # firmware/node — 시설 부착 노드 펌웨어
 
-> **이 폴더는 김민수 구현 영역입니다.**
-> 멘토(이령)와 Claude는 이 폴더의 코드를 작성·수정·생성하지 않습니다.
-> 도움은 PR 리뷰 코멘트·질문·개념 힌트로만 합니다.
+> 2026-08-28 역할 변경에 따라 이휘가 구현을 책임지고 AI 코딩 보조를
+> 사용할 수 있습니다. 민수는 실행·검증·실측·시연과 동작 원리 숙지를
+> 담당합니다. 실제 기여 내역은 제출 문서에 구분해 기록합니다.
 
 시설(AED·소화전·화장실)에 부착되는 노드 3대의 펌웨어(.ino)를 여기에
 만든다. 패킷 규격은 [`../common/packet.h`](../common/packet.h)를 따른다.
@@ -20,25 +20,22 @@
 
 - 패킷 규격: [`../common/packet.h`](../common/packet.h) — 필드·상수·주파수
 - RadioLib 예제: https://github.com/jgromes/RadioLib/tree/master/examples
-  (SX126x 폴더의 Transmit/Receive 예제부터)
+  (SX127x 폴더의 Transmit/Receive 예제부터)
 - 릴레이 동작 참고: [`../../sim/mesh_sim.py`](../../sim/mesh_sim.py) —
   같은 3규칙을 파이썬으로 모사한 시뮬레이터. 로직이 헷갈리면 여기 로그를
   먼저 돌려 볼 것
 - BLE 광고 확인 앱: nRF Connect for Mobile (Android/iOS)
 
-## Heltec WiFi LoRa 32 V3 핀맵 (보드 패키지 3.3.8의 variant 정의에서 확인)
-
-보드를 `Heltec WiFi LoRa 32(V3)`로 선택하면 아래 이름이 **상수로 이미
-정의**돼 있어 숫자를 직접 쓸 필요가 없습니다.
+## LILYGO T3 LoRa32 V1.6.1 핀맵
 
 | 용도 | 상수 이름 | GPIO | 비고 |
 |---|---|---|---|
-| LoRa SPI 선택(NSS) | `SS` | 8 | RadioLib `Module(SS, DIO0, RST_LoRa, BUSY_LoRa)` |
-| LoRa 인터럽트 | `DIO0` | 14 | 이름은 DIO0이지만 SX1262의 **DIO1** 핀입니다 |
-| LoRa 리셋 | `RST_LoRa` | 12 | |
-| LoRa BUSY | `BUSY_LoRa` | 13 | |
-| LoRa SPI | `SCK` / `MISO` / `MOSI` | 9 / 11 / 10 | 기본 `SPI` 객체가 자동 사용 |
-| OLED I2C | `SDA_OLED` / `SCL_OLED` | 17 / 18 | 일반 `SDA/SCL`(41/42)과 다름 |
-| OLED 리셋 | `RST_OLED` | 21 | |
-| 외부 전원 스위치 | `Vext` | 36 | **LOW로 내려야 OLED에 전원**이 들어감 |
-| 내장 LED | `LED` | 35 | |
+| LoRa SPI 선택(NSS) | `LORA_CS` | 18 | RadioLib `Module(18, 26, 23, 33)` |
+| LoRa 인터럽트 DIO0 | `LORA_DIO0` | 26 | SX1278 수신·송신 완료 인터럽트 |
+| LoRa 리셋 | `LORA_RST` | 23 | |
+| LoRa DIO1 | `LORA_DIO1` | 33 | RadioLib 보조 인터럽트 |
+| LoRa SPI | `SCK` / `MISO` / `MOSI` | 5 / 19 / 27 | `SPI.begin()`에서 명시 |
+| OLED I2C | `SDA` / `SCL` | 21 / 22 | SSD1306 주소 0x3C |
+| 내장 LED | `LED` | 25 | |
+
+안테나를 먼저 연결한 뒤 전원을 켜고 송신합니다.

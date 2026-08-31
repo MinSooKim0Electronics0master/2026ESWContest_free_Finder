@@ -2,9 +2,8 @@
 // finder-project 공유 패킷 규격 v1
 //
 // 노드(firmware/node) · 수신 단말(firmware/handset) · 시뮬레이터(sim/mesh_sim.py)
-// 가 모두 이 규격을 따른다. 이 파일에는 "규격만" 둔다 — 함수 구현은 넣지
-// 않는다(구현은 민수 담당). 규격을 바꾸면 sim/mesh_sim.py 상단의 상수도
-// 반드시 함께 맞출 것.
+// 가 모두 이 규격을 따른다. 이 파일에는 "규격만" 둔다. 규격을 바꾸면
+// sim/mesh_sim.py의 패킷 정의도 반드시 함께 맞출 것.
 
 #ifndef FINDER_PACKET_H
 #define FINDER_PACKET_H
@@ -15,9 +14,15 @@
 // 무선 설정
 // ---------------------------------------------------------------------------
 
-// KR920 대역 안의 923.0 MHz를 사용한다.
-// TODO: 안테나 연결 확인 후 저출력(예: 2 dBm)부터 시작해 실측하며 조정.
-#define FINDER_FREQ_MHZ            923.0f
+// 현재 확보한 SX1278 433 MHz 보드의 시험 중심주파수.
+// 433.795~434.045 MHz 데이터 전송용 대역 안에서 125 kHz 대역폭을 사용한다.
+// 실제 송신 전 KC 적합성평가와 국내 기술기준 충족 여부를 별도로 확인할 것.
+#define FINDER_FREQ_MHZ            433.92f
+#define FINDER_BANDWIDTH_KHZ       125.0f
+#define FINDER_SPREADING_FACTOR    7
+#define FINDER_CODING_RATE         5  // RadioLib 값 5는 LoRa 코딩률 4/5
+#define FINDER_SYNC_WORD           0x12
+#define FINDER_TX_POWER_DBM        2  // SX1278 PA_BOOST에서 지원하는 최저값
 
 // 재송신 전 랜덤 지연 범위(밀리초).
 // 같은 패킷을 들은 중계 노드 여럿이 "동시에" 재송신하면 전파가 충돌해
@@ -34,6 +39,12 @@
 // 노드 4대 구성의 최장 경로가 3홉이므로 4면 어떤 경로로도 닿으면서,
 // 릴레이가 무한히 도는 것을 막는다.
 #define FINDER_TTL_INITIAL         4
+
+// 시연 보드 역할 ID.
+#define FINDER_NODE_A              1
+#define FINDER_NODE_B              2
+#define FINDER_NODE_C              3
+#define FINDER_NODE_D              4
 
 // ---------------------------------------------------------------------------
 // 필드 값 정의
@@ -80,10 +91,10 @@ typedef struct __attribute__((packed)) {
     // 최대 255홉 — 1바이트로 충분하다. 초기값은 FINDER_TTL_INITIAL.
     uint8_t  ttl;
 
-    // 예약 바이트. 규격 v1을 바꾸지 않고 필드 하나(예: 배터리 잔량)를
-    // 추가할 수 있는 자리이며, 구조체 크기를 홀수 8에서 9로 맞춰 두는
-    // 것보다 확장 여지를 남기는 목적이 크다. 송신 시 0으로 채울 것.
-    uint8_t  reserved;
+    // 이 패킷을 마지막으로 송신한 노드 ID. 원 발신 때는 srcId와 같고,
+    // 중계할 때마다 자기 ID로 바꾼다. D가 B/C 중 어느 경로로 받았는지
+    // 표시하고, 가까운 거리에서 A의 직접 전파를 시연상 제외하는 데 쓴다.
+    uint8_t  lastHopId;
 } FinderPacket;
 
 // 규격 크기 검증: 패딩이 끼어들면 컴파일 단계에서 바로 잡아낸다.
