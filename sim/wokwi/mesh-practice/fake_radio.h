@@ -23,8 +23,9 @@
 #define FR_BROKER    "broker.hivemq.com"  // 공개 MQTT 브로커
 #define FR_PORT      1883
 // 공개 브로커라 같은 토픽을 쓰는 남과 섞일 수 있습니다.
-// TODO_TEAM 을 팀만 아는 문자열로 바꾸세요 (4개 탭 모두 같은 값으로).
-#define FR_TOPIC     "eswcontest/TODO_TEAM/lora"
+// 실물 D의 hybrid_bridge_check.ino와 반드시 같은 토픽이어야 합니다.
+// 공개 브로커이므로 개인정보나 비밀번호는 메시지에 넣지 않습니다.
+#define FR_TOPIC     "eswcontest/finder-2026-hybrid-8f4a2c/lora"
 // ----------------------------------------------------------------------
 
 typedef void (*FakeRadioHandler)(const FinderPacket &pkt);
@@ -50,6 +51,7 @@ static void _frOnMessage(char *topic, byte *payload, unsigned int len) {
   if (!audible) return;
   FinderPacket pkt;
   memcpy(&pkt, payload + 1, sizeof(pkt));
+  if (pkt.lastHopId != txId) return;
   if (_frHandler) _frHandler(pkt);
 }
 

@@ -1,63 +1,208 @@
-// mesh-practice — 김민수 구현 영역입니다.
-// 목표: PR4의 릴레이 3규칙을 보드 도착 전에 Wokwi에서 먼저 완성합니다.
-//
-// fake_radio.h 는 전파를 흉내 내는 연습용 도구(멘토 제공)이고,
-// 아래 TODO(메시 규칙)가 실제 과제입니다. 보드가 오면 fakeRadio* 호출부만
-// RadioLib으로 바꾸면 여기서 만든 로직은 그대로 씁니다.
-//
-// 준비: 같은 프로젝트에 packet.h(저장소 firmware/common/packet.h 복사)와
-//       fake_radio.h 파일을 만들어 두어야 합니다. 라이브러리 PubSubClient 추가.
+// Wokwi A/B/C 메시 노드입니다.
+// LoRa 대신 공개 MQTT를 패킷 전달 수단으로 사용합니다.
 
+#include <Arduino.h>
 #include "packet.h"
 #include "fake_radio.h"
 
-// ── 노드 설정: 탭(노드)마다 이 블록만 바꿉니다 ─────────────────────
-// 노드   MY_ID   HEAR(들리는 이웃)   역할            (다이아몬드 구성)
-//  A      1       {2, 3}             발신
-//  B      2       {1, 4}             중계
-//  C      3       {1, 4}             중계
-//  D      4       {2, 3}             수신 확인 대상
-const uint8_t MY_ID  = 1;
-const uint8_t HEAR[] = {2, 3};
-// ───────────────────────────────────────────────────────────────────
+// Wokwi 프로젝트를 A/B/C로 복제한 뒤 이 값만 1/2/3으로 바꿉니다.
+#ifndef FINDER_WOKWI_NODE_ID
+#define FINDER_WOKWI_NODE_ID FINDER_NODE_A
+#endif
 
-// TODO 1: msgId 캐시를 만듭니다 (규칙 1의 재료)
-//   - uint32_t 배열, 크기는 FINDER_MSG_CACHE_SIZE (packet.h에 있음)
-//   - "이 msgId를 본 적 있는가" 함수와 "기록" 함수를 만듭니다
-//   - 꽉 차면 가장 오래된 것부터 덮어씁니다
-//   - 같은 동작이 sim/mesh_sim.py 의 caches 에 있으니 로그로 비교해 보세요
+#if FINDER_WOKWI_NODE_ID == FINDER_NODE_A
+static const uint8_t HEAR[] = {FINDER_NODE_B, FINDER_NODE_C};
+#elif FINDER_WOKWI_NODE_ID == FINDER_NODE_B
+static const uint8_t HEAR[] = {FINDER_NODE_A, FINDER_NODE_D};
+#elif FINDER_WOKWI_NODE_ID == FINDER_NODE_C
+static const uint8_t HEAR[] = {FINDER_NODE_A, FINDER_NODE_D};
+#elif FINDER_WOKWI_NODE_ID == FINDER_NODE_D
+static const uint8_t HEAR[] = {FINDER_NODE_B, FINDER_NODE_C};
+#else
+#error "FINDER_WOKWI_NODE_ID는 1~4여야 합니다"
+#endif
 
-// TODO 2: 수신 처리 함수를 만듭니다
-//   void onPacket(const FinderPacket &pkt) {
-//     - 캐시에 있으면: "중복 폐기" 출력 후 끝            (규칙 1)
-//     - 없으면: 캐시에 기록하고 수신 내용 출력(srcId, ttl)
-//     - pkt.ttl 이 1보다 크면: ttl을 1 줄인 사본을 만들어  (규칙 2)
-//       50~300ms 뒤에 보내도록 "예약"합니다               (규칙 3)
-//       힌트 1: 지연 시간은 random(FINDER_RELAY_DELAY_MIN_MS,
-//               FINDER_RELAY_DELAY_MAX_MS + 1)
-//       힌트 2: delay()로 멈추면 그동안 수신을 못 합니다.
-//               "보낼 패킷"과 "보낼 시각(millis() + 지연)"을 변수에
-//               저장해 두고, loop에서 시각이 되면 송신하세요.
-//   }
+static const uint8_t MY_ID = FINDER_WOKWI_NODE_ID;
+static const uint32_t SOURCE_INTERVAL_MS = 10000;
 
-// TODO 3: setup()
-//   - Serial.begin(115200);
-//   - fakeRadioBegin(MY_ID, HEAR, sizeof(HEAR));
-//   - fakeRadioOnReceive(onPacket);
+static uint32_t seenMessages[FINDER_MSG_CACHE_SIZE] = {};
+static uint8_t seenCount = 0;
+static uint8_t seenWriteIndex = 0;
 
-// TODO 4: loop()
-//   - fakeRadioLoop(); 를 항상 호출합니다 (수신이 여기서 일어남)
-//   - A 노드(MY_ID == 1)만: 10초마다 새 패킷을 만들어 fakeRadioSend
-//     - msgId = ((uint32_t)MY_ID << 24) | 시퀀스   (packet.h 규격)
-//     - srcId = MY_ID, facilityType = FINDER_FACILITY_AED,
-//       status = FINDER_STATUS_OK, ttl = FINDER_TTL_INITIAL, reserved = 0
-//     - 보낸 msgId도 자기 캐시에 기록합니다 (되돌아온 메아리 폐기용)
-//   - TODO 2에서 예약해 둔 재송신 시각이 지났으면 송신합니다
+static bool relayPending = false;
+static FinderPacket pendingPacket = {};
+static uint32_t pendingSendAtMs = 0;
+
+static uint32_t sourceSequence = 1;
+static uint32_t nextSourceAtMs = 3000;
+
+static char nodeLetter(uint8_t nodeId) {
+  if (nodeId < FINDER_NODE_A || nodeId > FINDER_NODE_D) {
+    return '?';
+  }
+  return static_cast<char>('A' + nodeId - 1);
+}
+
+static bool timeReached(uint32_t now, uint32_t deadline) {
+  return static_cast<int32_t>(now - deadline) >= 0;
+}
+
+static bool packetIsValid(const FinderPacket& packet) {
+  const uint8_t encodedSource = static_cast<uint8_t>(packet.msgId >> 24);
+  return packet.msgId != 0 &&
+         encodedSource == packet.srcId &&
+         packet.srcId >= FINDER_NODE_A &&
+         packet.srcId <= FINDER_NODE_D &&
+         packet.facilityType >= FINDER_FACILITY_AED &&
+         packet.facilityType <= FINDER_FACILITY_TOILET &&
+         packet.status <= FINDER_STATUS_MAINT &&
+         packet.ttl <= FINDER_TTL_INITIAL &&
+         packet.lastHopId >= FINDER_NODE_A &&
+         packet.lastHopId <= FINDER_NODE_D;
+}
+
+static bool hasSeen(uint32_t msgId) {
+  for (uint8_t i = 0; i < seenCount; ++i) {
+    if (seenMessages[i] == msgId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void remember(uint32_t msgId) {
+  if (seenCount < FINDER_MSG_CACHE_SIZE) {
+    seenMessages[seenCount++] = msgId;
+    return;
+  }
+  seenMessages[seenWriteIndex] = msgId;
+  seenWriteIndex =
+      static_cast<uint8_t>((seenWriteIndex + 1) % FINDER_MSG_CACHE_SIZE);
+}
+
+static uint32_t relayDelayMs() {
+  // 정상 상태에서는 B가 먼저 도착하고, B 정지 후에는 C 경로가 보이도록
+  // 시연용 지연 범위를 분리합니다. 실제 메시 규칙의 전체 범위 안입니다.
+  if (MY_ID == FINDER_NODE_B) {
+    return random(50, 121);
+  }
+  if (MY_ID == FINDER_NODE_C) {
+    return random(180, 301);
+  }
+  return random(
+      FINDER_RELAY_DELAY_MIN_MS,
+      FINDER_RELAY_DELAY_MAX_MS + 1);
+}
+
+static void logPacket(const char* event, const FinderPacket& packet) {
+  Serial.print('[');
+  Serial.print(nodeLetter(MY_ID));
+  Serial.print("] ");
+  Serial.print(event);
+  Serial.print(" msgId=0x");
+  Serial.print(packet.msgId, HEX);
+  Serial.print(" src=");
+  Serial.print(nodeLetter(packet.srcId));
+  Serial.print(" via=");
+  Serial.print(nodeLetter(packet.lastHopId));
+  Serial.print(" ttl=");
+  Serial.println(packet.ttl);
+}
+
+static void onPacket(const FinderPacket& received) {
+  if (!packetIsValid(received)) {
+    Serial.println("[mesh] 잘못된 패킷 폐기");
+    return;
+  }
+  if (hasSeen(received.msgId)) {
+    logPacket("중복 폐기", received);
+    return;
+  }
+
+  remember(received.msgId);
+  logPacket("수신", received);
+
+  const bool isRelay =
+      MY_ID == FINDER_NODE_B || MY_ID == FINDER_NODE_C;
+  if (!isRelay || received.ttl <= 1) {
+    return;
+  }
+  if (relayPending) {
+    Serial.println("[mesh] 이전 재송신 대기 중이므로 새 예약 생략");
+    return;
+  }
+
+  pendingPacket = received;
+  --pendingPacket.ttl;
+  pendingPacket.lastHopId = MY_ID;
+  const uint32_t waitMs = relayDelayMs();
+  pendingSendAtMs = millis() + waitMs;
+  relayPending = true;
+
+  Serial.print('[');
+  Serial.print(nodeLetter(MY_ID));
+  Serial.print("] 재송신 예약 ");
+  Serial.print(waitMs);
+  Serial.println(" ms");
+}
+
+static void sendSourcePacket(uint32_t now) {
+  FinderPacket packet = {};
+  packet.msgId =
+      (static_cast<uint32_t>(FINDER_NODE_A) << 24) |
+      (sourceSequence & 0x00FFFFFFUL);
+  packet.srcId = FINDER_NODE_A;
+  packet.facilityType = FINDER_FACILITY_AED;
+  packet.status = FINDER_STATUS_OK;
+  packet.ttl = FINDER_TTL_INITIAL;
+  packet.lastHopId = FINDER_NODE_A;
+
+  if (!fakeRadioSend(packet)) {
+    Serial.println("[A] MQTT 미연결: 1초 뒤 발신 재시도");
+    nextSourceAtMs = now + 1000;
+    return;
+  }
+
+  remember(packet.msgId);
+  logPacket("발신", packet);
+  ++sourceSequence;
+  nextSourceAtMs = now + SOURCE_INTERVAL_MS;
+}
+
+static void sendPendingRelay(uint32_t now) {
+  if (!relayPending || !timeReached(now, pendingSendAtMs)) {
+    return;
+  }
+  if (!fakeRadioSend(pendingPacket)) {
+    Serial.println("[mesh] MQTT 미연결: 재송신 500ms 연기");
+    pendingSendAtMs = now + 500;
+    return;
+  }
+
+  logPacket("재송신", pendingPacket);
+  relayPending = false;
+}
 
 void setup() {
-  // TODO 3
+  Serial.begin(115200);
+  delay(200);
+  randomSeed(micros() ^ (static_cast<uint32_t>(MY_ID) << 16));
+
+  Serial.println();
+  Serial.println("=== finder Wokwi mesh node ===");
+  Serial.print("NODE: ");
+  Serial.println(nodeLetter(MY_ID));
+
+  fakeRadioBegin(MY_ID, HEAR, sizeof(HEAR));
+  fakeRadioOnReceive(onPacket);
 }
 
 void loop() {
-  // TODO 4
+  fakeRadioLoop();
+
+  const uint32_t now = millis();
+  if (MY_ID == FINDER_NODE_A && timeReached(now, nextSourceAtMs)) {
+    sendSourcePacket(now);
+  }
+  sendPendingRelay(now);
 }

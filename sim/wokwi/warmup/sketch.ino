@@ -1,4 +1,4 @@
-// warmup — 김민수 구현 영역입니다.
+// warmup — 역할 변경 전 만든 기초 학습용 스케치입니다.
 // 목표: 보드 도착 전에 Arduino 기본기(시리얼, OLED, 버튼)를 익힙니다.
 // 배선: OLED는 I2C(SDA=GPIO8, SCL=GPIO9, 주소 0x3C), 버튼은 GPIO4-GND.
 //
