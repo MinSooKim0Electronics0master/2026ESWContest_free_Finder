@@ -16,6 +16,7 @@
 
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <esp_system.h>
 #include "packet.h"
 
 // ---- 설정 ------------------------------------------------------------
@@ -36,6 +37,9 @@ static uint8_t _frMyId = 0;
 static const uint8_t *_frHear = nullptr;
 static uint8_t _frHearCount = 0;
 static FakeRadioHandler _frHandler = nullptr;
+static char _frClientId[48] = {};
+static uint32_t _frLastConnectAttemptMs = 0;
+static bool _frWasConnected = false;
 
 // MQTT 페이로드 구조: [보낸 노드 id 1바이트][FinderPacket 9바이트]
 // 앞의 1바이트는 "지금 송신기를 누른 노드"입니다. 중계된 패킷은 원래
@@ -65,8 +69,23 @@ inline void fakeRadioBegin(uint8_t myId, const uint8_t *hear, uint8_t hearCount)
   WiFi.begin(FR_WIFI_SSID, "", 6);          // 채널 6 지정 = Wokwi에서 빠른 연결
   while (WiFi.status() != WL_CONNECTED) { delay(200); Serial.print("."); }
   Serial.println(" 완료");
+
+  // 공개 브로커 전체에서 겹치지 않도록 보드 고유값과 난수를 함께 씁니다.
+  // 단순한 millis()만 쓰면 별도 Wokwi 실행이 같은 clientId를 사용하여
+  // 서로의 MQTT 연결을 반복해서 끊을 수 있습니다.
+  const uint64_t chipId = ESP.getEfuseMac();
+  snprintf(
+      _frClientId,
+      sizeof(_frClientId),
+      "finder-%u-%08lx-%08lx",
+      static_cast<unsigned int>(_frMyId),
+      static_cast<unsigned long>(chipId & 0xFFFFFFFFULL),
+      static_cast<unsigned long>(esp_random()));
+
   _frMqtt.setServer(FR_BROKER, FR_PORT);
   _frMqtt.setCallback(_frOnMessage);
+  _frMqtt.setKeepAlive(30);
+  _frMqtt.setSocketTimeout(10);
 }
 
 // 수신 처리 함수 등록 (수신은 fakeRadioLoop 호출 중에 일어납니다)
@@ -75,14 +94,35 @@ inline void fakeRadioOnReceive(FakeRadioHandler h) { _frHandler = h; }
 // loop()에서 계속 호출해야 수신·재접속이 됩니다
 inline void fakeRadioLoop() {
   if (!_frMqtt.connected()) {
-    String cid = String("finder-") + _frMyId + "-" + String(millis());
-    if (_frMqtt.connect(cid.c_str())) {
-      _frMqtt.subscribe(FR_TOPIC);
-      Serial.println("[fake_radio] 브로커 연결 완료");
-    } else {
-      delay(300);
+    if (_frWasConnected) {
+      Serial.print("[fake_radio] 브로커 연결 끊김, state=");
+      Serial.println(_frMqtt.state());
+      _frWasConnected = false;
+    }
+
+    const uint32_t now = millis();
+    if (_frLastConnectAttemptMs != 0 &&
+        now - _frLastConnectAttemptMs < 2000) {
       return;
     }
+    _frLastConnectAttemptMs = now;
+
+    if (!_frMqtt.connect(_frClientId)) {
+      Serial.print("[fake_radio] 브로커 연결 실패, state=");
+      Serial.println(_frMqtt.state());
+      return;
+    }
+
+    if (!_frMqtt.subscribe(FR_TOPIC)) {
+      Serial.println("[fake_radio] 토픽 구독 실패");
+      _frMqtt.disconnect();
+      return;
+    }
+
+    _frWasConnected = true;
+    Serial.print("[fake_radio] 브로커 연결 완료, clientId=");
+    Serial.println(_frClientId);
+    return;
   }
   _frMqtt.loop();
 }

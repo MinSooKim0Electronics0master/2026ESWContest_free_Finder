@@ -79,7 +79,8 @@ Wokwi는 LoRa와 BLE를 직접 시뮬레이션하지 않습니다. Wokwi 노드 
 실행하기 어려울 때 사용합니다. PC 시험 프로그램이 A 발신과 D 수신을
 대신하므로 Wokwi에서는 Finder-C 한 개만 실행합니다.
 
-1. Finder-C의 `sketch.ino`를 저장소 최신본으로 교체합니다.
+1. Finder-C의 `sketch.ino`와 `fake_radio.h`를 저장소 최신본으로
+   교체합니다.
 2. 노드 설정이 `FINDER_NODE_C`인지 확인하고 Finder-C만 실행합니다.
 3. 시리얼 모니터에서 `[fake_radio] 브로커 연결 완료`를 확인합니다.
 4. 저장소 루트의 PowerShell에서 다음 명령을 실행합니다.
@@ -102,6 +103,11 @@ py sim\mqtt_integration_test.py
 공개 MQTT 브로커를 사용하므로 개인정보나 비밀번호를 패킷에 넣지
 않습니다. 시험 중에는 같은 토픽을 사용하는 다른 Finder 프로젝트를 모두
 정지합니다.
+
+`브로커 연결 완료`가 계속 반복되면 MQTT 연결이 끊기는 상태입니다.
+최신 `fake_radio.h`는 고유한 clientId를 사용하고, 연결이 다시 끊기면
+`state=` 값을 출력합니다. 동일한 Finder-C 프로젝트를 실행한 다른 탭도
+모두 정지합니다.
 
 ## 완료 기준
 
