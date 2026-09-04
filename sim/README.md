@@ -26,12 +26,18 @@ python mesh_sim.py --topology full4 --seed 7
 
 ```bash
 python test_detour.py
+python test_relay_queue.py
 ```
 
 - `test_diamond_kill_B_detour`: **핵심 검증** — B 제거 후에도 D 수신 유지
   (시드 20종 반복)
 - `test_line4_kill_B_no_detour`: 우회로가 없으면 실패함을 확인하는 대조군
 - `test_duplicate_suppression`: 캐시 중복 폐기로 무한 릴레이가 없음을 확인
+- `test_relay_queue.py`: 100ms 간격 연속 패킷에서 단일 슬롯의 누락을
+  재현하고, 16칸 재송신 대기열이 10건을 모두 보존하는지 확인
+
+두 테스트는 파이썬 표준 라이브러리만 사용하므로 Wokwi 접속이나 유료
+구독이 필요하지 않습니다.
 
 ## 토폴로지
 

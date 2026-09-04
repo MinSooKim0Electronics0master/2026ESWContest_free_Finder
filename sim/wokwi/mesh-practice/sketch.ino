@@ -29,9 +29,16 @@ static uint32_t seenMessages[FINDER_MSG_CACHE_SIZE] = {};
 static uint8_t seenCount = 0;
 static uint8_t seenWriteIndex = 0;
 
-static bool relayPending = false;
-static FinderPacket pendingPacket = {};
-static uint32_t pendingSendAtMs = 0;
+// 짧은 시간에 여러 패킷이 들어와도 하나만 남기고 버리지 않도록
+// 캐시 크기와 같은 수의 재송신 대기 항목을 보관합니다.
+struct PendingRelay {
+  FinderPacket packet;
+  uint32_t sendAtMs;
+};
+
+static PendingRelay relayQueue[FINDER_MSG_CACHE_SIZE] = {};
+static uint8_t relayQueueHead = 0;
+static uint8_t relayQueueCount = 0;
 
 static uint32_t sourceSequence = 1;
 static uint32_t nextSourceAtMs = 3000;
@@ -94,6 +101,19 @@ static uint32_t relayDelayMs() {
       FINDER_RELAY_DELAY_MAX_MS + 1);
 }
 
+static bool enqueueRelay(const FinderPacket& packet, uint32_t sendAtMs) {
+  if (relayQueueCount >= FINDER_MSG_CACHE_SIZE) {
+    return false;
+  }
+
+  const uint8_t writeIndex = static_cast<uint8_t>(
+      (relayQueueHead + relayQueueCount) % FINDER_MSG_CACHE_SIZE);
+  relayQueue[writeIndex].packet = packet;
+  relayQueue[writeIndex].sendAtMs = sendAtMs;
+  ++relayQueueCount;
+  return true;
+}
+
 static void logPacket(const char* event, const FinderPacket& packet) {
   Serial.print('[');
   Serial.print(nodeLetter(MY_ID));
@@ -127,23 +147,21 @@ static void onPacket(const FinderPacket& received) {
   if (!isRelay || received.ttl <= 1) {
     return;
   }
-  if (relayPending) {
-    Serial.println("[mesh] 이전 재송신 대기 중이므로 새 예약 생략");
+  FinderPacket relayPacket = received;
+  --relayPacket.ttl;
+  relayPacket.lastHopId = MY_ID;
+  const uint32_t waitMs = relayDelayMs();
+  if (!enqueueRelay(relayPacket, millis() + waitMs)) {
+    Serial.println("[mesh] 재송신 대기열 가득 참: 패킷 폐기");
     return;
   }
-
-  pendingPacket = received;
-  --pendingPacket.ttl;
-  pendingPacket.lastHopId = MY_ID;
-  const uint32_t waitMs = relayDelayMs();
-  pendingSendAtMs = millis() + waitMs;
-  relayPending = true;
 
   Serial.print('[');
   Serial.print(nodeLetter(MY_ID));
   Serial.print("] 재송신 예약 ");
   Serial.print(waitMs);
-  Serial.println(" ms");
+  Serial.print(" ms / 대기 ");
+  Serial.println(relayQueueCount);
 }
 
 static void sendSourcePacket(uint32_t now) {
@@ -169,18 +187,23 @@ static void sendSourcePacket(uint32_t now) {
   nextSourceAtMs = now + SOURCE_INTERVAL_MS;
 }
 
-static void sendPendingRelay(uint32_t now) {
-  if (!relayPending || !timeReached(now, pendingSendAtMs)) {
-    return;
-  }
-  if (!fakeRadioSend(pendingPacket)) {
-    Serial.println("[mesh] MQTT 미연결: 재송신 500ms 연기");
-    pendingSendAtMs = now + 500;
-    return;
-  }
+static void sendPendingRelays(uint32_t now) {
+  while (relayQueueCount > 0) {
+    PendingRelay& pending = relayQueue[relayQueueHead];
+    if (!timeReached(now, pending.sendAtMs)) {
+      return;
+    }
+    if (!fakeRadioSend(pending.packet)) {
+      Serial.println("[mesh] MQTT 미연결: 재송신 500ms 연기");
+      pending.sendAtMs = now + 500;
+      return;
+    }
 
-  logPacket("재송신", pendingPacket);
-  relayPending = false;
+    logPacket("재송신", pending.packet);
+    relayQueueHead = static_cast<uint8_t>(
+        (relayQueueHead + 1) % FINDER_MSG_CACHE_SIZE);
+    --relayQueueCount;
+  }
 }
 
 void setup() {
@@ -204,5 +227,5 @@ void loop() {
   if (MY_ID == FINDER_NODE_A && timeReached(now, nextSourceAtMs)) {
     sendSourcePacket(now);
   }
-  sendPendingRelay(now);
+  sendPendingRelays(now);
 }
